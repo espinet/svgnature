@@ -1,97 +1,86 @@
-(($, window, document, undefined) ->
-  getCoords = (e) ->
-    $el = $(this)
+(($, window, document) ->
+  class Svgnature
+    constructor: (el, settings) ->
+      @settings = settings
+      @paper = Raphael(el)
+      @coords = ''
 
-    if e.touches
-      x: e.touches[0].clientX
-      y: e.touches[0].clientY
-    else if e.originalEvent?.touches?
-      x: e.originalEvent.touches[0].clientX
-      y: e.originalEvent.touches[0].clientY
-    else
-      x: e.offsetX
-      y: e.offsetY
+      $(el).on('mousedown', @drawStart)
+        .on('mouseup', @drawEnd)
+        .on('mousemove', @move)
+        .on('touchstart', @drawStart)
+        .on('touchend', @drawEnd)
+        .on('touchmove', @move)
 
-  drawStart = (e) ->
-    $el = $(this)
-    $el.data('drawing.svgnature', true)
-    $el.data('pathObj.svgnature', createNewPath($el)) unless $el.data('pathObj.svgnature')
+    getCoords: (e) ->
+      if e.touches
+        x: e.touches[0].clientX
+        y: e.touches[0].clientY
+      else if e.originalEvent?.touches?
+        x: e.originalEvent.touches[0].clientX
+        y: e.originalEvent.touches[0].clientY
+      else
+        x: e.offsetX
+        y: e.offsetY
 
-    setNextCoord($el, 'M', getCoords(e))
+    drawStart: (e) ->
+      $(this).data('svgnature').initializeLine(e)
 
-  move = (e) ->
-    e.preventDefault()
-    drawLine($(this), getCoords(e)) if $el.data('drawing.svgnature')
+    move: (e) ->
+      e.preventDefault()
+      $(this).data('svgnature').drawLine(e) 
 
-  drawEnd = (e) ->
-    $(this.)data('drawing.svgnature', false)
+    drawEnd: (e) ->
+      $(this).data('svgnature').drawing = false
 
-  drawLine = ($el, coords) ->
-    $el.data('pathObj.svgnature').attr('path', setNextCoord($el, 'L', coords))
+    initializeLine: (e) ->
+      @drawing = true
+      @path ||= @paper.path().attr(@settings)
+      @setNextCoord('M', @getCoords(e))
 
-  createNewPath = ($el) ->
-    settings = $el.data('settings.svgnature')
-    $el.data('paper.svgnature').path().attr(settings)
+    drawLine: (e) ->
+      if @drawing
+        @setNextCoord('L', @getCoords(e))
+        @path.attr('path', @getPath())
 
-  setNextCoord = ($el, command, coords) ->
-    oldPath = $el.data('coords.svgnature')
-    $el.data('coords.svgnature', "#{oldPath}#{command}#{coords.x},#{coords.y}")
-    $el.data('coords.svgnature')
+    setNextCoord: (command, coords) ->
+      @coords = "#{@coords}#{command}#{coords.x},#{coords.y}"
 
-  addPath = (elements, path) ->
-    elements.each (i, el) =>
-      oldPath = $(el).data('coords.svgnature')
-      newPath = "#{oldPath}#{path}"
-      $(el).data('coords.svgnature', newPath)
-      $(el).data('pathObj.svgnature').attr('path', newPath)
+    addPath: (path) ->
+      @coords = "#{@coords}#{path}"
+      @path.attr('path', @coords)
+      true
 
-  getPath = (elements) ->
-    elements.map (i, el) ->
-      $(el).data('coords.svgnature')
+    getPath: ->
+      @coords
 
-  clearPath = (elements) ->
-    elements.each (i, el) ->
-      $(el).data('coords.svgnature', '')
-      $(el).data('pathObj.svgnature').attr('path', '')
+    clearPath: ->
+      @coords = ''
+      @path.attr('path', '')
+      true
 
-  getURI = (elements) ->
-    elements.map (i, el) ->
-      $el = $(el)
-      paper = $el.data('paper.svgnature')
+    getURI: ->
       serializer = new XMLSerializer
-      "data:image/svg+xml;utf8,#{serializer.serializeToString(paper.canvas)}"
-
-  initialize = (elements, settings) ->
-    elements.each (i, el) =>
-      paper = Raphael(el)
-      $(el).data('settings.svgnature', settings)
-
-      $(el).on('mousedown.svgnature', drawStart)
-      $(el).on('mouseup.svgnature', drawEnd)
-      $(el).on('mousemove.svgnature', move)
-       
-      $(el).on('touchstart.svgnature', drawStart)
-      $(el).on('touchend.svgnature', drawEnd)
-      $(el).on('touchmove.svgnature', move)
-       
-      $(el).data('paper.svgnature', paper)
+      "data:image/svg+xml;utf8,#{serializer.serializeToString(@paper.canvas)}"
 
   $.fn.svgnature = (method, args...) ->
-    elements = $(this)
-    if method == 'getURI'
-      getSVG(elements)
-    else if method == 'getPath'
-      getPath(elements)
-    else if method == 'addPath'
-      addPath(elements, args[0])
-    else if method == 'clearPath'
-      clearPath(elements)
-    else
-      defaults =
-        'stroke': '#000'
-        'stroke-width': '2'
+    $(this).map (i, el) ->
+      svgnature = $(el).data('svgnature')
 
-      settings = $.extend(defaults, method)
-      initialize(elements, settings)
+      if method == 'getURI'
+        svgnature.getURI()
+      else if method == 'getPath'
+        svgnature.getPath()
+      else if method == 'addPath'
+        svgnature.addPath(args[i])
+      else if method == 'clearPath'
+        svgnature.clearPath()
+      else
+        defaults =
+          'stroke': '#000'
+          'stroke-width': '2'
 
-)(jQuery, window, document, undefined)
+        settings = $.extend(defaults, method)
+        $(el).data('svgnature', new Svgnature(el, settings))
+
+)(jQuery, window, document)
